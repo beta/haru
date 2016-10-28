@@ -1,0 +1,17 @@
+# Dart files
+build/
+packages/
+pubspec.lock
+.buildlog
+.packages
+.project
+.pub/
+
+# macOS files
+.DS_Store
+
+# IntelliJ IDEA files
+*.iml
+*.ipr
+*.iws
+.idea/
