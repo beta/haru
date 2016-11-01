@@ -31,7 +31,7 @@ Haru is published as a library package in [pub.dartlang.org](https://pub.dartlan
     
     ```dart
     @command('greet')
-    class Greet {
+    class Greeter extends Command {
     ```
     
  2. Add actions for your command
