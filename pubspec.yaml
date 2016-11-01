@@ -1,5 +1,5 @@
 name: haru
-version: 0.1.0
+version: 0.1.1
 description: An easy-to-use framework for creating command-line applications in Dart.
 author: Beta Kuang <beta.kuang@gmail.com>
 homepage: https://github.com/beta/haru
