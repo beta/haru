@@ -4,134 +4,45 @@
 
 import 'dart:mirrors';
 
-import 'command.dart';
-import 'errors.dart';
+/// Base class for CLI apps.
+abstract class Haru {
+  /// Finds all command methods from this Haru instance.
+  ///
+  /// A command method is a method annotated with metadata [command].
+  Map<String, DeclarationMirror> _findCommands() {
+    final commandMeta = reflectClass(command);
+    final clazz = reflect(this).type;
 
-class Haru {
-  static void start(List<String> args) {
+    var commands = <String, DeclarationMirror>{};
+    clazz.declarations.values
+        .where(
+            (method) => method.metadata.any((meta) => meta.type == commandMeta))
+        .forEach((method) {
+      commands[method.metadata
+          .firstWhere((meta) => meta.type == commandMeta)
+          .reflectee
+          .name] = method;
+    });
+    return commands;
+  }
+
+  /// Starts the Haru app with command-line args.
+  void run(List<String> args) {
+    var commands = _findCommands();
+
     if (args.isEmpty) {
-      Haru.entryCommand.execute([]);
+      // Todo: show usage.
     } else {
-      Command command = Haru.createCommand(args[0]);
-
-      List<String> arguments = [];
-      for (var i = 1; i < args.length; i += 1) {
-        arguments.add(args[i]);
+      if (commands.containsKey(args[0])) {
+        reflect(this).invoke(commands[args[0]].simpleName, args.sublist(1));
       }
-
-      command.execute(arguments);
-    }
-  }
-
-  static List<ClassMirror> _getCommandClassMirrors() {
-    final ClassMirror commandClassMirror = reflectClass(Command);
-
-    return currentMirrorSystem().libraries.values.fold([],
-        (List<ClassMirror> mirrors, LibraryMirror libraryMirror) {
-      mirrors.addAll(libraryMirror.declarations.values.where((declaration) =>
-          (declaration is ClassMirror &&
-              declaration.isSubclassOf(commandClassMirror))));
-      return mirrors;
-    });
-  }
-
-  static List<ClassMirror> _getErrorCommandClassMirrors() {
-    final ClassMirror errorClassMirror = reflectClass(ErrorCommand);
-
-    return currentMirrorSystem().libraries.values.fold([],
-        (List<ClassMirror> mirrors, LibraryMirror libraryMirror) {
-      mirrors.addAll(libraryMirror.declarations.values.where((declaration) =>
-          (declaration is ClassMirror &&
-              declaration.isSubclassOf(errorClassMirror))));
-      return mirrors;
-    });
-  }
-
-  static Command createCommand(commandName) {
-    final ClassMirror commandAnnotationMirror = reflectClass(command);
-
-    List<ClassMirror> commandClassMirrors = _getCommandClassMirrors();
-    for (var classMirror in commandClassMirrors) {
-      for (var metadata in classMirror.metadata) {
-        if (metadata.type == commandAnnotationMirror &&
-            metadata.reflectee.commandName == commandName) {
-          return classMirror.newInstance(new Symbol(''), []).reflectee;
-        }
-      }
-    }
-
-    return _getErrorCommand(commandName);
-  }
-
-  static get entryCommand {
-    final ClassMirror entryAnnotationMirror = reflectClass(_entryAnnotation);
-
-    ClassMirror entryClassMirror;
-
-    List<ClassMirror> commandClassMirrors = _getCommandClassMirrors();
-    for (var classMirror in commandClassMirrors) {
-      for (var metadata in classMirror.metadata) {
-        if (metadata.type == entryAnnotationMirror) {
-          if (entryClassMirror == null) {
-            entryClassMirror = classMirror;
-          } else {
-            throw new MultipleEntryCommandError();
-          }
-        }
-      }
-    }
-
-    if (entryClassMirror != null) {
-      return entryClassMirror.newInstance(new Symbol(''), []).reflectee;
-    } else {
-      return new Command();
-    }
-  }
-
-  static ErrorCommand _getErrorCommand(commandName) {
-    final ClassMirror errorAnnotationMirror = reflectClass(_errorAnnotation);
-
-    ClassMirror errorClassMirror;
-
-    List<ClassMirror> commandClassMirrors = _getErrorCommandClassMirrors();
-    for (var classMirror in commandClassMirrors) {
-      for (var metadata in classMirror.metadata) {
-        if (metadata.type == errorAnnotationMirror) {
-          if (errorClassMirror == null) {
-            errorClassMirror = classMirror;
-          } else {
-            throw new MultipleErrorCommandError();
-          }
-        }
-      }
-    }
-
-    if (errorClassMirror != null) {
-      return errorClassMirror
-          .newInstance(new Symbol(''), [commandName]).reflectee;
-    } else {
-      return new DefaultErrorCommand(commandName);
     }
   }
 }
 
-/// Annotation class for commands.
+/// Metadata class for commands.
 class command {
-  final String commandName;
+  final String name;
 
-  const command(this.commandName);
+  const command(this.name);
 }
-
-/// Annotation class for commands used when an error occurs.
-class _errorAnnotation {
-  const _errorAnnotation();
-}
-
-const error = const _errorAnnotation();
-
-/// Annotation class for the default command.
-class _entryAnnotation {
-  const _entryAnnotation();
-}
-
-const entry = const _entryAnnotation();
