@@ -2,5 +2,11 @@
 // Licensed under the MIT License. See LICENSE file in the project root for
 // license information.
 
-export 'src/haru.dart';
-export 'src/meta.dart';
+class HaruException implements Exception {
+  final String message;
+
+  HaruException(this.message);
+
+  @override
+  String toString() => message;
+}

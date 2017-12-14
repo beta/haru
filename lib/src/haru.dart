@@ -4,45 +4,79 @@
 
 import 'dart:mirrors';
 
+import 'meta.dart';
+
 /// Base class for CLI apps.
 abstract class Haru {
-  /// Finds all command methods from this Haru instance.
+  Map<String, _Command> _commands = {};
+
+  /// Builds [_commands] from all command methods in this Haru instance.
   ///
-  /// A command method is a method annotated with metadata [command].
-  Map<String, DeclarationMirror> _findCommands() {
+  /// A command method is a method annotated with [command] metadata.
+  void _buildCommands() {
     final commandMeta = reflectClass(command);
     final clazz = reflect(this).type;
 
-    var commands = <String, DeclarationMirror>{};
     clazz.declarations.values
         .where(
             (method) => method.metadata.any((meta) => meta.type == commandMeta))
         .forEach((method) {
-      commands[method.metadata
+      var commandName = method.metadata
           .firstWhere((meta) => meta.type == commandMeta)
           .reflectee
-          .name] = method;
+          .name;
+      _commands[commandName] = new _Command(commandName, method);
     });
-    return commands;
   }
 
   /// Starts the Haru app with command-line args.
   void run(List<String> args) {
-    var commands = _findCommands();
+    _buildCommands();
 
     if (args.isEmpty) {
       // Todo: show usage.
     } else {
-      if (commands.containsKey(args[0])) {
-        reflect(this).invoke(commands[args[0]].simpleName, args.sublist(1));
+      if (_commands.containsKey(args[0])) {
+        reflect(this).invoke(_commands[args[0]].methodName, args.sublist(1));
       }
     }
   }
 }
 
-/// Metadata class for commands.
-class command {
-  final String name;
+/// A [_Command] wraps all the information about a command.
+///
+/// Information about a command includes:
+///  - [name],
+///  - [methodName] as Dart [Symbol],
+///  - abbreviation,
+///  - flags,
+///  - options, and
+///  - positional arguments.
+class _Command {
+  final String _name;
+  String get name => _name;
 
-  const command(this.name);
+  final Symbol _methodName;
+  Symbol get methodName => _methodName;
+
+  _Command(String name, DeclarationMirror method)
+      : this._name = name,
+        this._methodName = method.simpleName;
+}
+
+/// A flag is a boolean option for a command.
+///
+/// If the flag is provided in the argument list, the value is [true].
+/// Otherwise the value is [false].
+class _Flag {
+  final String _name;
+  String get name => _name;
+
+  final String _abbr;
+  String get abbr => _abbr;
+  bool get hasAbbr => _abbr != null && _abbr.isNotEmpty;
+
+  _Flag(String name, {String abbr})
+      : this._name = name,
+        this._abbr = abbr;
 }

@@ -6,8 +6,13 @@ import 'package:haru/haru.dart';
 
 class ExampleApp extends Haru {
   @command('hello')
-  void hello(List<String> args) {
-    print('Hello, $args.');
+  @flag('loud', abbr: 'l')
+  void hello(String name, {bool loud = false}) {
+    var message = 'Hello, $name.';
+    if (loud) {
+      message = message.toUpperCase();
+    }
+    print(message);
   }
 
   @command('bye')
