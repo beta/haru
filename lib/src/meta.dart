@@ -32,17 +32,25 @@ final CommandMeta = reflectClass(command);
 /// If the flag is provided in the argument list, the value is [true].
 /// Otherwise the value is [false].
 ///
-/// The name of a flag should be in lowercase, and words should be
-/// separated with a dash ("-"). Do not add the leading dashes ("--") as they
-/// will be added automatically. For example, the following flag names are
-/// correct:
+/// The name of a flag should be in kabab-case, which means all characters are
+/// in lowercase, and words should be separated with a dash ("-"). Do not add
+/// the leading dashes ("--") as they will be added automatically. For example,
+/// the following flag names are correct:
+///
 ///  - flag
 ///  - another-flag
+///
 /// While these are wrong names:
+///
 ///  - Flag
 ///  - FLAG
 ///  - another_flag
 ///  - -flag
+///
+/// If no name is provided, a name will be generated based on the parameter name
+/// that is annotated by this metadata. For example, flag name for parameter
+/// "aParameter" will be "a-parameter", and "aVery_complicatedName" will result
+/// in "a-very-complicated-name".
 ///
 /// Abbreviation of a flag usually comes in one or two lower characters. Mostly
 /// abbreviations are selected based on the first one or two characters of the
