@@ -2,5 +2,6 @@
 // Licensed under the MIT License. See LICENSE file in the project root for
 // license information.
 
-export 'src/haru.dart';
-export 'src/meta.dart';
+export 'src/haru.dart' show App;
+export 'src/meta.dart' show app, command, Flag, flag;
+export 'src/error.dart';

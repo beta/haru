@@ -4,23 +4,31 @@
 
 import 'package:haru/haru.dart';
 
-class ExampleApp extends Haru {
+@app('example')
+class ExampleApp extends App {
+  @Flag(abbr: 'l')
+  bool loud;
+
   @command('hello')
-  @flag('loud', abbr: 'l')
-  void hello(String name, {bool loud = false}) {
-    var message = 'Hello, $name.';
+  void hello(@flag bool withExclamation) {
+    _printMessage('Hello${withExclamation ? '!' : ''}');
+  }
+
+  @command('bye')
+  void bye() {
+    _printMessage('Goodbye');
+  }
+
+  void _printMessage(String message) {
     if (loud) {
       message = message.toUpperCase();
     }
     print(message);
   }
-
-  @command('bye')
-  void bye() {
-    print('Good bye');
-  }
 }
 
 void main(List<String> args) {
-  new ExampleApp().run(args);
+  new ExampleApp()
+      .run(args)
+      .catchError((error) => print('Error: ${error.toString()}'));
 }

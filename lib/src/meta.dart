@@ -2,14 +2,30 @@
 // Licensed under the MIT License. See LICENSE file in the project root for
 // license information.
 
-import 'error.dart';
+import 'dart:mirrors';
+
+/// Metadata class for CLI apps.
+class app {
+  final String name;
+
+  const app(this.name);
+}
+
+/// Class mirror for [app] metadata.
+final AppMeta = reflectClass(app);
 
 /// Metadata class for commands.
 class command {
   final String name;
 
-  const command(this.name);
+  final String abbr;
+  bool get hasAbbr => abbr != null && abbr.isNotEmpty;
+
+  const command(this.name, {this.abbr = null});
 }
+
+/// Class mirror for [command] metadata.
+final CommandMeta = reflectClass(command);
 
 /// Metadata class for flags.
 ///
@@ -36,9 +52,47 @@ class command {
 /// The name and abbreviation of a flag must be unique. If a flag with the same
 /// name or abbreviation of an existing one is found, a [HaruException] will be
 /// thrown.
-class flag {
+class Flag {
   final String name;
-  final String abbr;
+  bool get hasName => name != null && name.isNotEmpty;
 
-  const flag(this.name, {String abbr = ''}) : this.abbr = abbr;
+  final String abbr;
+  bool get hasAbbr => abbr != null && abbr.isNotEmpty;
+
+  const Flag({this.name = null, this.abbr = null});
 }
+
+/// A simplified version of [Flag] metadata for flags with no abbreviations and
+/// the default name generated from variable name.
+const flag = const Flag();
+
+/// Class mirror for [Flag] metadata.
+final FlagMeta = reflectClass(Flag);
+
+/// Metadata class for options.
+///
+/// TODO
+class Option {
+  const Option();
+}
+
+/// A simplified version of [Option] metadata for options with no abbreviations
+/// and the default name generated from variable name.
+const option = const Option();
+
+/// Class mirror for [Option] metadata.
+final OptionMeta = reflectClass(Option);
+
+/// Metadata class for positional arguments.
+///
+/// TODO
+class Arg {
+  const Arg();
+}
+
+/// A simplified version of [Arg] metadata for arguments with the default name
+/// generated from variable name.
+const arg = const Arg();
+
+/// Class mirror for [Arg] metadata.
+final ArgMeta = reflectClass(Arg);
