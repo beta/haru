@@ -23,7 +23,7 @@ abstract class App extends Flags {
     _appName = _getAppName();
 
     // Build global flags from instance members with @flag metadata.
-    _buildGlobalFlags();
+    _buildGlobalFlagsAndOptions();
 
     // Builds the command map from methods with @command metadata.
     _buildCommands();
@@ -79,34 +79,53 @@ abstract class App extends Flags {
   ///
   /// Global flags are defined as member variables annotated with [meta.Flag]
   /// metadata.
-  void _buildGlobalFlags() {
-    void addGlobalFlag(
-        Symbol variableName, Iterable<InstanceMirror> flagMetaMirrors) {
-      if (flagMetaMirrors.length > 1) {
-        throw new _HaruError(
-            'Only one @flag metadata can be used for instance member '
-            '"$variableName".');
-      }
-      flagMetaMirrors.forEach((flagMetaMirror) =>
-          _addFlag(new Flag.fromMeta(variableName, flagMetaMirror.reflectee)));
-    }
-
-    final clazz = reflect(this).type;
+  void _buildGlobalFlagsAndOptions() {
     final boolType = reflectType(bool);
 
-    clazz.declarations.values
-        .where((declaration) =>
-            declaration is VariableMirror &&
-            (declaration as VariableMirror).type == boolType &&
-            declaration.metadata
-                .any((metadata) => metadata.type == meta.FlagMeta))
-        .map((declaration) => {
-              'variableName': declaration.simpleName,
-              'flagMetaMirrors': declaration.metadata
-                  .where((metadata) => metadata.type == meta.FlagMeta)
-            })
-        .forEach((map) =>
-            addGlobalFlag(map['variableName'], map['flagMetaMirrors']));
+    bool isFlag(DeclarationMirror declaration) =>
+        declaration is VariableMirror &&
+        declaration.type == boolType &&
+        declaration.metadata.any((metadata) => metadata.type == meta.FlagMeta);
+
+    bool isOption(DeclarationMirror declaration) =>
+        declaration is VariableMirror &&
+        declaration.metadata
+            .any((metadata) => metadata.type == meta.OptionMeta);
+
+    bool isFlagOrOption(DeclarationMirror declaration) =>
+        isFlag(declaration) || isOption(declaration);
+
+    bool isFlagMeta(InstanceMirror metadata) => metadata.type == meta.FlagMeta;
+
+    bool isOptionMeta(InstanceMirror metadata) =>
+        metadata.type == meta.OptionMeta;
+
+    bool isFlagOrOptionMeta(InstanceMirror metadata) =>
+        isFlagMeta(metadata) || isOptionMeta(metadata);
+
+    final clazz = reflect(this).type;
+
+    // Iterate instance members in class and find flags and options.
+    clazz.declarations.values.where(isFlagOrOption).forEach((variable) {
+      var metadataList = variable.metadata;
+
+      var metadataCount = metadataList
+          .where(
+              (metadata) => [meta.FlagMeta, meta.OptionMeta].contains(metadata))
+          .length;
+      if (metadataCount > 1) {
+        throw new _HaruError(
+            'Field "${MirrorSystem.getName(variable.simpleName)}" of class '
+            '"${MirrorSystem.getName(clazz.simpleName)}" can only have one '
+            '@flag or @option metadata.');
+      }
+
+      var metadata = metadataList.firstWhere(isFlagOrOptionMeta);
+      if (metadata.type == meta.FlagMeta) {
+        // Add flag.
+        _addFlag(new Flag.fromMeta(variable.simpleName, metadata.reflectee));
+      }
+    });
   }
 
   /// Builds [_commands] from all command methods in this Haru instance.
