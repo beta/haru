@@ -203,8 +203,7 @@ abstract class App extends Flags {
           parsed.addGlobalFlag(getGlobalFlag(arg));
         } else {
           // This arg is not a flag.
-          throw new HaruException(
-              'No flag named $arg for command "${parsed.command.name}".');
+          throw new HaruException('No flag named $arg is found.');
         }
       } else if (isCommand(arg)) {
         // This arg is a command.
