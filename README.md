@@ -21,6 +21,16 @@ class GitApp {
 }
 ```
 
+Use the `main` function to start your app.
+
+```dart
+void main(List<String> args) {
+  new GitApp()
+      .run(args)
+      .catchError((error) => print('Error: ${error.toString()}'));
+}
+```
+
 A Haru app is made up of commands. Commands can have flags (`--flag`), options (`--option value`) and positional arguments. For example, in `git add -A src/`,
 
  - `git` is the app name,
