@@ -55,17 +55,17 @@ Commands support flags, options and positional arguments. These values are all d
 
 ```dart
 @command('add')
-void add(@arg String pathspec, @Flag(abbr: 'A') bool all) {
+void add(@Arg String pathspec, @flag(abbr: 'A') bool all) {
   // ...
 }
 ```
 
 The metadatas for flags, options and positional arguments come in two forms.
 
- - The lowercase ones (`@flag`, `@option` and `@arg`) have no parameters. Names of these values are generated automatically from the parameter variable name. For example, parameter `all` will result in `--all`, and `anotherName` -> `--another-name`.
- - The ones starting in uppercase (`@Flag`, `@Option` and `@Arg`) have their parameters. `@Flag` and `@Option` have two named parameters `name` and `abbr`. Example: `@Flag(name: 'flag', abbr: 'f')` will make `--flag` and `-f` work the same. Leading dashes should not be included.
+ - The ones starting in uppercase (`@Flag`, `@Option` and `@Arg`) have no parameters. Names of these values are generated automatically from the parameter variable name. For example, parameter `all` will result in `--all`, and `anotherName` -> `--another-name`.
+ - The lowercase ones (`@flag`, `@option` and `@arg`) have their parameters. `@flag` and `@option` have two named parameters `name` and `abbr`. Example: `@flag(name: 'flag', abbr: 'f')` will make `--flag` and `-f` work the same. Leading dashes should not be included.
 
-   `@Arg` has one named parameter `name`. This value will be used in command usage, for example `@Arg(name: 'value')` -> `Usage: appname command <value>`.
+   `@arg` has one named parameter `name`. This value will be used in command usage, for example `@arg(name: 'value')` -> `Usage: appname command <value>`.
 
 ### Global flags and options
 
@@ -76,11 +76,11 @@ Global flags and options are defined as instance variables. For example:
 ```dart
 @command('git')
 class GitApp {
-  @flag
+  @Flag
   bool verbose;
 
   @command('add')
-  void add(@arg String pathspec, @Flag(abbr: 'A') bool all) {
+  void add(@Arg String pathspec, @flag(abbr: 'A') bool all) {
     if (verbose) {
       // ...
     }

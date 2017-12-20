@@ -10,236 +10,145 @@ import 'meta.dart' as meta;
 import 'util.dart' as util;
 
 /// Base class for CLI apps.
-abstract class App extends Flags {
-  String _appName;
-  String get appName => _appName;
+abstract class App {
+  _AppInfo _info;
+  Commands _commands = new Commands();
+  Settings _settings = new Settings();
 
-  Map<String, Command> _commands = {};
-  Map<String, String> _commandAbbrs = {};
+  /// Builds this app.
+  ///
+  /// This method builds up
+  ///
+  ///  - app info (name, version, ...),
+  ///  - global settings (fields annotated with [meta.Flag] and [meta.Option]),
+  ///  - commands (methods with [meta.command]), and
+  ///  - positional arguments ([meta.Arg]) settings for each command.
+  ///
+  /// After building, this app is still not ready to run. Use [_parse] to parse
+  /// the command-line args and make it runnable.
+  void _build() {
+    /// Builds info of this app from the [meta.app] metadata.
+    ///
+    /// If the number of [meta.app] metadata is 0 or more than 1, a
+    /// [HaruException] will be thrown.
+    void buildAppInfo() {
+      try {
+        meta.app appMeta = reflect(this)
+            .type
+            .metadata
+            .singleWhere((metadata) => metadata.type == meta.AppMeta)
+            .reflectee;
+        _info = new _AppInfo(appMeta.name, appMeta.version);
+      } on StateError {
+        throw new _HaruError(
+            'Class ${MirrorSystem.getName(reflect(this).type.simpleName)} must '
+            'have one and only one @app metadata.');
+      }
+    }
+
+    /// Collects all global settings.
+    ///
+    /// Global settings are defined as member variables annotated with
+    /// [meta.Flag] or [meta.Option] metadata.
+    void buildGlobalSettings() {
+      bool isSetting(DeclarationMirror variable) =>
+          variable is VariableMirror &&
+          variable.metadata.any((metadata) =>
+              metadata.type == meta.FlagMeta ||
+              metadata.type == meta.OptionMeta);
+
+      bool isSettingMeta(InstanceMirror metadata) =>
+          metadata.type == meta.FlagMeta || metadata.type == meta.OptionMeta;
+
+      dynamic getSettingMeta(VariableMirror variable) {
+        if (variable.metadata.where(isSettingMeta).length != 1) {
+          throw new _HaruError(
+              'Field "${MirrorSystem.getName(variable.simpleName)}" can only '
+              'have one @flag or @option metadata.');
+        }
+
+        return variable.metadata.firstWhere(isSettingMeta).reflectee;
+      }
+
+      Map<Symbol, dynamic> addToSymbolMetaMap(
+          Map<Symbol, dynamic> map, VariableMirror settingVariable) {
+        map[settingVariable.simpleName] = getSettingMeta(settingVariable);
+        return map;
+      }
+
+      void handleSetting(Symbol symbol, dynamic metadata) {
+        if (metadata is meta.flag) {
+          _settings.add(new Flag.fromMeta(symbol, metadata as meta.flag));
+        } else if (metadata is meta.option) {
+          _settings.add(new Option.fromMeta(symbol, metadata as meta.option));
+        }
+      }
+
+      final clazz = reflect(this).type;
+      clazz.declarations.values
+          .where(isSetting)
+          .fold({}, addToSymbolMetaMap).forEach(handleSetting);
+    }
+
+    /// Builds all commands.
+    ///
+    /// Commands are defined as instance methods annotated with [meta.command]
+    /// metadata.
+    void buildCommands() {
+      bool isCommand(DeclarationMirror declaration) =>
+          declaration is MethodMirror &&
+          declaration.metadata
+              .any((metadata) => metadata.type == meta.CommandMeta);
+
+      void handleCommand(MethodMirror method) {
+        var command = new Command.fromMethod(method);
+        _commands.add(command);
+      }
+
+      final clazz = reflect(this).type;
+      clazz.declarations.values
+          .where(isCommand)
+          .map((declaration) => declaration as MethodMirror)
+          .forEach(handleCommand);
+    }
+
+    buildAppInfo();
+    buildGlobalSettings();
+    buildCommands();
+  }
+
+  /// Parses the command-line arguments for this app.
+  ///
+  /// From the args, this method figures out which command is called, and fills
+  /// the settings and positional arguments for the called command, as well as
+  /// global settings.
+  ///
+  /// TODO
+  void _parse(List<String> args) {}
 
   /// Starts the Haru app with command-line args.
   Future run(List<String> args) {
-    // Gets app name from the @app metadata.
-    _appName = _getAppName();
+    _build();
 
-    // Build global flags from instance members with @flag metadata.
-    _buildGlobalFlagsAndOptions();
-
-    // Builds the command map from methods with @command metadata.
-    _buildCommands();
-
-    // Parses the command-line args.
-    _Parsed parsed;
     try {
-      parsed = _parseArgs(args);
+      _parse(args);
     } on HaruException catch (e) {
       return new Future.error(e);
     }
-    // Sets the flags into app.
-    if (parsed.hasGlobalFlags) {
-      var instance = reflect(this);
-      parsed.globalFlags.forEach(instance.setField);
-    }
 
-    // Executes the command.
-    if (parsed.hasCommand) {
-      reflect(this).invoke(parsed.command.symbol,
-          parsed.command.params.map((param) {
-        if (param is Flag) {
-          return parsed.commandFlags[(param as Flag).symbol];
-        }
-      }));
-    } else {
-      /// TODO: Execute entry command.
-    }
+    /// TODO: Executes the command.
 
     return new Future.value(0);
   }
-
-  /// Returns the app name set with [meta.app] metadata.
-  ///
-  /// If the number of [meta.app] metadata is 0 or more than 1, a
-  /// [HaruException] will be thrown.
-  String _getAppName() {
-    try {
-      meta.app appMeta = reflect(this)
-          .type
-          .metadata
-          .singleWhere((metadata) => metadata.type == meta.AppMeta)
-          .reflectee;
-      return appMeta.name;
-    } on StateError {
-      throw new _HaruError(
-          'Class ${MirrorSystem.getName(reflect(this).type.simpleName)} must '
-          'have one and only one @app metadata.');
-    }
-  }
-
-  /// Collects all global flags.
-  ///
-  /// Global flags are defined as member variables annotated with [meta.Flag]
-  /// metadata.
-  void _buildGlobalFlagsAndOptions() {
-    final boolType = reflectType(bool);
-
-    bool isFlag(DeclarationMirror declaration) =>
-        declaration is VariableMirror &&
-        declaration.type == boolType &&
-        declaration.metadata.any((metadata) => metadata.type == meta.FlagMeta);
-
-    bool isOption(DeclarationMirror declaration) =>
-        declaration is VariableMirror &&
-        declaration.metadata
-            .any((metadata) => metadata.type == meta.OptionMeta);
-
-    bool isFlagOrOption(DeclarationMirror declaration) =>
-        isFlag(declaration) || isOption(declaration);
-
-    bool isFlagMeta(InstanceMirror metadata) => metadata.type == meta.FlagMeta;
-
-    bool isOptionMeta(InstanceMirror metadata) =>
-        metadata.type == meta.OptionMeta;
-
-    bool isFlagOrOptionMeta(InstanceMirror metadata) =>
-        isFlagMeta(metadata) || isOptionMeta(metadata);
-
-    final clazz = reflect(this).type;
-
-    // Iterate instance members in class and find flags and options.
-    clazz.declarations.values.where(isFlagOrOption).forEach((variable) {
-      var metadataList = variable.metadata;
-
-      var metadataCount = metadataList
-          .where(
-              (metadata) => [meta.FlagMeta, meta.OptionMeta].contains(metadata))
-          .length;
-      if (metadataCount > 1) {
-        throw new _HaruError(
-            'Field "${MirrorSystem.getName(variable.simpleName)}" of class '
-            '"${MirrorSystem.getName(clazz.simpleName)}" can only have one '
-            '@flag or @option metadata.');
-      }
-
-      var metadata = metadataList.firstWhere(isFlagOrOptionMeta);
-      if (metadata.type == meta.FlagMeta) {
-        // Add flag.
-        _addFlag(new Flag.fromMeta(variable.simpleName, metadata.reflectee));
-      }
-    });
-  }
-
-  /// Builds [_commands] from all command methods in this Haru instance.
-  ///
-  /// [_commands] is a map with command name (specified with [meta.command]) as
-  /// key and [_Command] instance as value.
-  ///
-  /// A command method is a method annotated with [meta.command] metadata.
-  void _buildCommands() {
-    final clazz = reflect(this).type;
-
-    clazz.declarations.values
-        .where((method) => method.metadata
-            .any((metadata) => metadata.type == meta.CommandMeta))
-        .forEach((commandMethod) => _addCommand(commandMethod as MethodMirror));
-  }
-
-  /// Adds a new command into [_commands].
-  ///
-  /// A new [_Command] instance is created for every command method, with
-  /// flags, options and positional arguments.
-  void _addCommand(MethodMirror commandMethod) {
-    var command = new Command(commandMethod);
-    _commands[command.name] = command;
-
-    if (command.hasAbbr) {
-      _commandAbbrs[command.abbr] = command.name;
-    }
-  }
-
-  _Parsed _parseArgs(List<String> args) {
-    bool isCommandAbbr(String arg) => _commandAbbrs.containsKey(arg);
-
-    bool isCommandFullName(String arg) => _commands.containsKey(arg);
-
-    bool isCommand(String arg) => isCommandAbbr(arg) || isCommandFullName(arg);
-
-    Command getCommand(String arg) =>
-        isCommandAbbr(arg) ? _commandAbbrs[arg] : _commands[arg];
-
-    bool isFlagAbbr(String arg, Flags flags) =>
-        flags.hasFlags &&
-        arg.startsWith('-') &&
-        !arg.startsWith('--') &&
-        flags.flagAbbrs.containsKey(arg.substring(1));
-
-    bool isFlagFullName(String arg, Flags flags) =>
-        flags.hasFlags &&
-        arg.startsWith('--') &&
-        flags.flags.containsKey(arg.substring(2));
-
-    bool isFlag(String arg, Flags flags) =>
-        isFlagAbbr(arg, flags) || isFlagFullName(arg, flags);
-
-    Flag getFlag(String arg, Flags flags) => isFlagAbbr(arg, flags)
-        ? flags.flags[flags.flagAbbrs[arg.substring(1)]]
-        : flags.flags[arg.substring(2)];
-
-    bool isGlobalFlag(String arg) => isFlag(arg, this);
-
-    Flag getGlobalFlag(String arg) => getFlag(arg, this);
-
-    var parsed = new _Parsed(this);
-
-    var iter = args.iterator;
-    while (iter.moveNext()) {
-      var arg = iter.current;
-      if (arg.startsWith('-')) {
-        // This arg is a flag or option.
-        if (parsed.hasCommand && isFlag(arg, parsed.command)) {
-          // This arg is a flag for current command.
-          parsed.addCommandFlag(getFlag(arg, parsed.command));
-        } else if (isGlobalFlag(arg)) {
-          // This arg is a global flag.
-          parsed.addGlobalFlag(getGlobalFlag(arg));
-        } else {
-          // This arg is not a flag.
-          throw new HaruException('No flag named $arg is found.');
-        }
-      } else if (isCommand(arg)) {
-        // This arg is a command.
-        parsed.command = getCommand(arg);
-      } else {
-        /// TODO: Check if the command has positional arguments.
-        throw new HaruException('"$arg" is not a valid command.');
-      }
-    }
-
-    return parsed;
-  }
 }
 
-class _Parsed {
-  _Parsed(App app) {
-    app.flags.values.forEach((flag) => globalFlags[flag.symbol] = false);
-  }
+class _AppInfo {
+  final String name;
 
-  Command _command;
-  Command get command => _command;
-  void set command(Command command) {
-    _command = command;
-    commandFlags.clear();
-    _command.flags.values.forEach((flag) => commandFlags[flag.symbol] = false);
-  }
+  final String version;
+  bool get hasVersion => version != null && version.isNotEmpty;
 
-  bool get hasCommand => _command != null;
-
-  Map<Symbol, bool> globalFlags = {};
-  bool get hasGlobalFlags => globalFlags.isNotEmpty;
-  void addGlobalFlag(Flag flag) => globalFlags[flag.symbol] = true;
-
-  Map<Symbol, bool> commandFlags = {};
-  bool get hasCommandFlags => commandFlags.isNotEmpty;
-  void addCommandFlag(Flag flag) => commandFlags[flag.symbol] = true;
+  _AppInfo(this.name, this.version);
 }
 
 /// Error class to thrown when the Haru API is used incorrectly by the
@@ -259,10 +168,9 @@ class _HaruError extends Error {
 ///  - name,
 ///  - method name as a Dart [Symbol],
 ///  - abbreviation,
-///  - flags,
-///  - options, and
+///  - settings (flags and options), and
 ///  - positional arguments.
-class Command extends Flags {
+class Command {
   String _name;
   String get name => _name;
 
@@ -273,19 +181,22 @@ class Command extends Flags {
   final Symbol _symbol;
   Symbol get symbol => _symbol;
 
-  List<dynamic> _params = [];
-  List<dynamic> get params => _params;
+  Settings _settings = new Settings();
+  Settings get settings => _settings;
 
-  Command(MethodMirror method) : this._symbol = method.simpleName {
+  Command.fromMethod(MethodMirror method) : this._symbol = method.simpleName {
     meta.command commandMeta = method.metadata
         .firstWhere((metadata) => metadata.type == meta.CommandMeta)
         .reflectee;
     _name = commandMeta.name;
     _abbr = commandMeta.abbr;
 
-    // Iterate parameters and find flags, options and arguments.
-    method.parameters.forEach((parameter) {
-      var metadataList = parameter.metadata;
+    _buildSettings(method.parameters);
+  }
+
+  void _buildSettings(List<ParameterMirror> params) {
+    params.forEach((param) {
+      var metadataList = param.metadata;
 
       var metadataCount = metadataList
           .where((metadata) => [meta.FlagMeta, meta.OptionMeta, meta.ArgMeta]
@@ -293,13 +204,13 @@ class Command extends Flags {
           .length;
       if (metadataCount == 0) {
         throw new _HaruError(
-            'Parameter "${MirrorSystem.getName(parameter.simpleName)}" of '
-            'method "${MirrorSystem.getName(method.simpleName)}" must have a '
+            'Parameter "${MirrorSystem.getName(param.simpleName)}" of '
+            'method "${MirrorSystem.getName(_symbol)}" must have a '
             '@flag, @option or @arg metadata.');
       } else if (metadataCount > 1) {
         throw new _HaruError(
-            'Parameter "${MirrorSystem.getName(parameter.simpleName)}" of '
-            'method "${MirrorSystem.getName(method.simpleName)}" can only have '
+            'Parameter "${MirrorSystem.getName(param.simpleName)}" of '
+            'method "${MirrorSystem.getName(_symbol)}" can only have '
             'one @flag, @option or @arg metadata.');
       }
 
@@ -310,9 +221,8 @@ class Command extends Flags {
           ].contains(metadata.type));
       if (metadata.type == meta.FlagMeta) {
         // Add flag.
-        var flag = new Flag.fromMeta(parameter.simpleName, metadata.reflectee);
-        _addFlag(flag);
-        _params.add(flag);
+        var flag = new Flag.fromMeta(param.simpleName, metadata.reflectee);
+        _settings.add(flag);
       } else if (metadata.type == meta.OptionMeta) {
         // TODO: Add option.
       } else if (metadata.type == meta.ArgMeta) {
@@ -322,62 +232,212 @@ class Command extends Flags {
   }
 
   @override
-  String toString() {
-    return 'Command {name: $name, ${hasAbbr ? 'abbr: $abbr, ' : ''}'
-        'symbol: $symbol, flags: $_flags}';
-  }
+  String toString() =>
+      'Command {name: $name, ${hasAbbr ? 'abbr: $abbr, ' : ''} symbol: '
+      '$symbol, settings: $_settings}';
 }
 
-/// A flag is a boolean option for a command.
+/// Container for [Command]s.
+class Commands {
+  Map<String, Command> _commands = {};
+  Map<String, String> _abbrs = {};
+
+  bool get isNotEmpty => _commands.isNotEmpty;
+
+  bool contains(String name) => _commands.containsKey(name);
+  bool containsAbbr(String abbr) => _abbrs.containsKey(abbr);
+
+  /// Returns a [Command] instance with command name.
+  Command find(String name) => _commands[name];
+
+  /// Returns a [Command] instance with command abbreviation.
+  Command findWithAbbr(String abbr) => _commands[_abbrs[abbr]];
+
+  /// Adds a new [Command].
+  ///
+  /// If a command with the same name alreay exists, throw a
+  /// [NameDuplicateError]. If a command with the same abbreviation already
+  /// exists, throw a [AbbrDuplicateError].
+  void add(Command command) {
+    if (contains(command.name)) {
+      throw new NameDuplicateError(command.name);
+    }
+    _commands[command.name] = command;
+
+    if (command.hasAbbr) {
+      if (containsAbbr(command.abbr)) {
+        throw new AbbrDuplicateError(command.abbr);
+      }
+      _abbrs[command.abbr] = command.name;
+    }
+  }
+
+  @override
+  String toString() =>
+      _commands.values
+          .fold('Commands [', (str, command) => str += command.toString()) +
+      ']';
+}
+
+/// A setting item for a command (or the global app).
 ///
-/// The value of a flag is `true` if it's provided in the command-line
-/// arguments. Otherwise the value is `false`.
-class Flag {
+/// This class is the base class for [Flag] and [Option]. A setting is an item
+/// with a name, an optional abbreviation, a corresponding variable name as
+/// [Symbol] and one or more calculated value. For flags, there is only one
+/// value type of which is [bool], and for options the number and type may vary.
+abstract class Setting {
+  /// Setting name.
   final String _name;
   String get name => _name;
 
+  /// Setting abbreviation.
   final String _abbr;
   String get abbr => _abbr;
   bool get hasAbbr => _abbr != null && _abbr.isNotEmpty;
 
+  /// Symbol of variable.
   final Symbol _symbol;
   Symbol get symbol => _symbol;
 
-  Flag(Symbol symbol, {String name = null, String abbr = null})
-      : _symbol = symbol,
-        _name = name ?? util.camelToKebab(MirrorSystem.getName(symbol)),
+  Setting(Symbol symbol, {String name = null, String abbr = null})
+      : _name = util.camelToKebab(MirrorSystem.getName(symbol)),
+        _symbol = symbol,
         _abbr = abbr;
 
-  Flag.fromMeta(Symbol symbol, meta.Flag flagMeta)
+  /// Number of command-line arguments needed.
+  int get numOfArgs;
+
+  /// Calculates a value from command-line args.
+  void calculate(List<String> args);
+
+  /// Returns the calculated value.
+  dynamic get value;
+}
+
+/// A flag is a boolean setting for a command.
+///
+/// The value of a flag is `true` if it's provided in the command-line
+/// arguments. Otherwise the value is `false`.
+class Flag extends Setting {
+  Flag(Symbol symbol, {String name = null, String abbr = null})
+      : super(symbol, name: name, abbr: abbr);
+
+  Flag.fromMeta(Symbol symbol, meta.flag flagMeta)
       : this(symbol, name: flagMeta.name, abbr: flagMeta.abbr);
+
+  /// A flag does not need any arguments.
+  @override
+  int get numOfArgs => 0;
+
+  bool _calculated = false;
+
+  /// Calculated a value from command-line args.
+  ///
+  /// Calling this method means the flag appears in the command-line arguments.
+  /// The calculated value is therefore `true`.
+  @override
+  void calculate(List<String> args) {
+    _calculated = true;
+  }
+
+  @override
+  bool get value => _calculated;
 
   @override
   String toString() {
-    return 'Flag {name: $name, ${'abbr: $abbr, ' ?? ''}symbol: $symbol}';
+    return 'Flag {name: $name, ${'abbr: $abbr, ' ?? ''} symbol: $symbol}';
   }
 }
 
-/// Base class for classes that can own [Flag]s.
-abstract class Flags {
-  Map<String, Flag> _flags = {};
-  Map<String, Flag> get flags => _flags;
+/// An option is a setting item for a command.
+///
+/// TODO
+class Option extends Setting {
+  Option(Symbol symbol, {String name = null, String abbr = null})
+      : super(symbol, name: name, abbr: abbr);
 
-  Map<String, String> _flagAbbrs = {};
-  Map<String, String> get flagAbbrs => _flagAbbrs;
+  Option.fromMeta(Symbol symbol, meta.option optionMeta)
+      : this(symbol, name: optionMeta.name, abbr: optionMeta.abbr);
 
-  bool get hasFlags => _flags.isNotEmpty;
+  /// An option may have multiple arguments.
+  ///
+  /// Only 1 argument is supported now. TODO: Support multiple args.
+  @override
+  int get numOfArgs => 1;
 
-  /// Returns a [Flag] instance from flag name.
-  Flag getFlag(String flagName) => _flags[flagName];
+  /// Calculate a value from command-line args.
+  ///
+  /// TODO: Calculate the value.
+  void calculate(List<String> args) {
+    return null;
+  }
 
-  /// Returns a [Flag] instance from flag abbreviation.
-  Flag getFlagFromAbbr(String flagAbbr) => _flags[_flagAbbrs[flagAbbr]];
+  /// TODO: Returns the calculated value.
+  @override
+  dynamic get value => null;
 
-  /// Adds a new [Flag].
-  void _addFlag(Flag flag) {
-    _flags[flag.name] = flag;
-    if (flag.hasAbbr) {
-      _flagAbbrs[flag.abbr] = flag.name;
+  @override
+  String toString() {
+    return 'Option {name: $name, ${'abbr: $abbr, ' ?? ''} symbol: $symbol}';
+  }
+}
+
+/// Container for [Setting]s.
+class Settings {
+  Map<String, Setting> _settings = {};
+  Map<String, String> _abbrs = {};
+
+  bool get isNotEmpty => _settings.isNotEmpty;
+
+  bool get hasFlags => _settings.values.any((setting) => setting is Flag);
+
+  bool get hasOptions => _settings.values.any((setting) => setting is Option);
+
+  bool contains(String name) => _settings.containsKey(name);
+  bool containsAbbr(String abbr) => _abbrs.containsKey(abbr);
+
+  /// Returns a [Setting] instance with setting name.
+  Setting find(String name) => _settings[name];
+
+  /// Returns a [Setting] instance with setting abbreviation.
+  Setting findWithAbbr(String abbr) => _settings[_abbrs[abbr]];
+
+  /// Adds a new [Setting].
+  ///
+  /// If a setting with the same name already exists, throw a
+  /// [NameDuplicateError]. If a setting with the same abbreviation
+  /// already exists, throw a [AbbrDuplicateError].
+  void add(Setting setting) {
+    if (contains(setting.name)) {
+      throw new NameDuplicateError(setting.name);
+    }
+    _settings[setting.name] = setting;
+
+    if (setting.hasAbbr) {
+      if (containsAbbr(setting.abbr)) {
+        throw new AbbrDuplicateError(setting.abbr);
+      }
+      _abbrs[setting.abbr] = setting.name;
     }
   }
+
+  @override
+  String toString() =>
+      _settings.values
+          .fold('Settings [', (str, setting) => str += setting.toString()) +
+      ']';
+}
+
+/// Error to throw when two commands or settings have the same name.
+class NameDuplicateError extends Error {
+  final String name;
+
+  NameDuplicateError(this.name);
+}
+
+/// Error to throw when two commands or settings have the same abbreviation.
+class AbbrDuplicateError extends Error {
+  final String abbr;
+
+  AbbrDuplicateError(this.abbr);
 }

@@ -6,11 +6,11 @@ import 'package:haru/haru.dart';
 
 @app('example')
 class ExampleApp extends App {
-  @Flag(abbr: 'l')
+  @flag(abbr: 'l')
   bool loud;
 
   @command('hello')
-  void hello(@flag bool withExclamation) {
+  void hello(@flag(abbr: 'e') bool withExclamation) {
     _printMessage('Hello${withExclamation ? '!' : ''}');
   }
 

@@ -3,5 +3,5 @@
 // license information.
 
 export 'src/haru.dart' show App;
-export 'src/meta.dart' show app, command, Flag, flag;
+export 'src/meta.dart' show app, command, flag, Flag, arg, Arg;
 export 'src/error.dart';

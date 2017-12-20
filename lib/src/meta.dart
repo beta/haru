@@ -8,7 +8,10 @@ import 'dart:mirrors';
 class app {
   final String name;
 
-  const app(this.name);
+  final String version;
+  bool get hasVersion => version != null && version.isNotEmpty;
+
+  const app(this.name, {this.version = null});
 }
 
 /// Class mirror for [app] metadata.
@@ -58,49 +61,54 @@ final CommandMeta = reflectClass(command);
 /// ("-") should not be added as it will be added automatically.
 ///
 /// The name and abbreviation of a flag must be unique. If a flag with the same
-/// name or abbreviation of an existing one is found, a [HaruException] will be
-/// thrown.
-class Flag {
+/// name or abbreviation of an existing one is found, an error will be thrown.
+class flag {
   final String name;
   bool get hasName => name != null && name.isNotEmpty;
 
   final String abbr;
   bool get hasAbbr => abbr != null && abbr.isNotEmpty;
 
-  const Flag({this.name = null, this.abbr = null});
+  const flag({this.name = null, this.abbr = null});
 }
 
-/// A simplified version of [Flag] metadata for flags with no abbreviations and
+/// A simplified version of [flag] metadata for flags with no abbreviations and
 /// the default name generated from variable name.
-const flag = const Flag();
+const Flag = const flag();
 
-/// Class mirror for [Flag] metadata.
-final FlagMeta = reflectClass(Flag);
+/// Class mirror for [flag] metadata.
+final FlagMeta = reflectClass(flag);
 
 /// Metadata class for options.
 ///
 /// TODO
-class Option {
-  const Option();
+class option {
+  final String name;
+  bool get hasName => name != null && name.isNotEmpty;
+
+  final String abbr;
+  bool get hasAbbr => abbr != null && abbr.isNotEmpty;
+
+  const option({this.name = null, this.abbr = null});
 }
 
-/// A simplified version of [Option] metadata for options with no abbreviations
+/// A simplified version of [option] metadata for options with no abbreviations
 /// and the default name generated from variable name.
-const option = const Option();
+const Option = const option();
 
-/// Class mirror for [Option] metadata.
-final OptionMeta = reflectClass(Option);
+/// Class mirror for [option] metadata.
+final OptionMeta = reflectClass(option);
 
 /// Metadata class for positional arguments.
 ///
 /// TODO
-class Arg {
-  const Arg();
+class arg {
+  const arg();
 }
 
-/// A simplified version of [Arg] metadata for arguments with the default name
+/// A simplified version of [arg] metadata for arguments with the default name
 /// generated from variable name.
-const arg = const Arg();
+const Arg = const arg();
 
-/// Class mirror for [Arg] metadata.
-final ArgMeta = reflectClass(Arg);
+/// Class mirror for [arg] metadata.
+final ArgMeta = reflectClass(arg);
