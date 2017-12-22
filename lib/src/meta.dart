@@ -30,6 +30,17 @@ class command {
 /// Class mirror for [command] metadata.
 final CommandMeta = reflectClass(command);
 
+/// Base class for flag and option metadata.
+class _settingMeta {
+  final String name;
+  bool get hasName => name != null && name.isNotEmpty;
+
+  final String abbr;
+  bool get hasAbbr => abbr != null && abbr.isNotEmpty;
+
+  const _settingMeta({this.name = null, this.abbr = null});
+}
+
 /// Metadata class for flags.
 ///
 /// If the flag is provided in the argument list, the value is [true].
@@ -62,14 +73,9 @@ final CommandMeta = reflectClass(command);
 ///
 /// The name and abbreviation of a flag must be unique. If a flag with the same
 /// name or abbreviation of an existing one is found, an error will be thrown.
-class flag {
-  final String name;
-  bool get hasName => name != null && name.isNotEmpty;
-
-  final String abbr;
-  bool get hasAbbr => abbr != null && abbr.isNotEmpty;
-
-  const flag({this.name = null, this.abbr = null});
+class flag extends _settingMeta {
+  const flag({String name = null, String abbr = null})
+      : super(name: name, abbr: abbr);
 }
 
 /// A simplified version of [flag] metadata for flags with no abbreviations and
@@ -81,15 +87,18 @@ final FlagMeta = reflectClass(flag);
 
 /// Metadata class for options.
 ///
-/// TODO
-class option {
-  final String name;
-  bool get hasName => name != null && name.isNotEmpty;
-
-  final String abbr;
-  bool get hasAbbr => abbr != null && abbr.isNotEmpty;
-
-  const option({this.name = null, this.abbr = null});
+/// An option must have at least one argument. Currently Haru supports only one
+/// argument for options.
+///
+/// The name and abbreviation of an option is in the same style as a flag's. See
+/// documentation of [flag] for reference of name and abbreviation.
+///
+/// The name and abbreviation of an option must be unique. If an option with the
+/// same name or abbreviation of an existing one is found, an error will be
+/// thrown.
+class option extends _settingMeta {
+  const option({String name = null, String abbr = null})
+      : super(name: name, abbr: abbr);
 }
 
 /// A simplified version of [option] metadata for options with no abbreviations
@@ -101,9 +110,19 @@ final OptionMeta = reflectClass(option);
 
 /// Metadata class for positional arguments.
 ///
-/// TODO
+/// A positional argument
+///
+/// The name of a positional argument is only used in the usage string. For
+/// example, the usage of a `hello` command with a `name` argument is usually
+/// shown as `Usage: hello <name>`. The name is in the same style as a flag's.
+/// See documentation of [flag] for reference of name.
+///
+/// The name of a positional argument does not need to be unique.
 class arg {
-  const arg();
+  final String name;
+  bool get hasName => name != null && name.isNotEmpty;
+
+  const arg({this.name = null});
 }
 
 /// A simplified version of [arg] metadata for arguments with the default name
