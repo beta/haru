@@ -40,7 +40,7 @@ abstract class App {
             .reflectee;
         _info = new _AppInfo(appMeta.name, appMeta.version);
       } on StateError {
-        throw new _HaruError(
+        throw new HaruError(
             'Class ${MirrorSystem.getName(reflect(this).type.simpleName)} must '
             'have one and only one @app metadata.');
       }
@@ -62,7 +62,7 @@ abstract class App {
 
       dynamic getSettingMeta(VariableMirror variable) {
         if (variable.metadata.where(isSettingMeta).length != 1) {
-          throw new _HaruError(
+          throw new HaruError(
               'Field "${MirrorSystem.getName(variable.simpleName)}" can only '
               'have one @flag or @option metadata.');
         }
@@ -77,20 +77,14 @@ abstract class App {
       }
 
       void handleSetting(Symbol symbol, dynamic metadata) {
-        var settingType = 'flag';
         try {
           if (metadata is meta.flag) {
             _settings.add(new Flag.fromMeta(symbol, metadata as meta.flag));
           } else if (metadata is meta.option) {
-            settingType = 'option';
             _settings.add(new Option.fromMeta(symbol, metadata as meta.option));
           }
-        } on NameDuplicateError catch (e) {
-          throw new _HaruError('Name "${e.name}" for global $settingType '
-              '"${MirrorSystem.getName(symbol)}" is duplicate.');
-        } on AbbrDuplicateError catch (e) {
-          throw new _HaruError('Abbreviation "${e.abbr}" for global '
-              '$settingType "${MirrorSystem.getName(symbol)}" is duplicate.');
+        } on DuplicateError catch (e) {
+          throw new HaruError(e.message);
         }
       }
 
@@ -111,8 +105,20 @@ abstract class App {
               .any((metadata) => metadata.type == meta.CommandMeta);
 
       void handleCommand(MethodMirror method) {
-        var command = new Command.fromMethod(method);
-        _commands.add(command);
+        var command;
+        // Create a command.
+        try {
+          command = new Command.fromMethod(method);
+        } on DuplicateError catch (e) {
+          throw new HaruError(e.message);
+        }
+
+        // Add to command list.
+        try {
+          _commands.add(command);
+        } on DuplicateError catch (e) {
+          throw new HaruError(e.message);
+        }
       }
 
       final clazz = reflect(this).type;
@@ -161,17 +167,6 @@ class _AppInfo {
   _AppInfo(this.name, this.version);
 }
 
-/// Error class to thrown when the Haru API is used incorrectly by the
-/// developer, instead of the user.
-class _HaruError extends Error {
-  final String message;
-
-  _HaruError(this.message);
-
-  @override
-  String toString() => message;
-}
-
 /// A [Command] wraps all the information about a command.
 ///
 /// Information about a command includes:
@@ -213,12 +208,12 @@ class Command {
               .contains(metadata.type))
           .length;
       if (metadataCount == 0) {
-        throw new _HaruError(
+        throw new HaruError(
             'Parameter "${MirrorSystem.getName(param.simpleName)}" of '
             'method "${MirrorSystem.getName(_symbol)}" must have a '
             '@flag, @option or @arg metadata.');
       } else if (metadataCount > 1) {
-        throw new _HaruError(
+        throw new HaruError(
             'Parameter "${MirrorSystem.getName(param.simpleName)}" of '
             'method "${MirrorSystem.getName(_symbol)}" can only have '
             'one @flag, @option or @arg metadata.');
@@ -266,17 +261,21 @@ class Commands {
   /// Adds a new [Command].
   ///
   /// If a command with the same name alreay exists, throw a
-  /// [NameDuplicateError]. If a command with the same abbreviation already
+  /// [DuplicateError]. If a command with the same abbreviation already
   /// exists, throw a [AbbrDuplicateError].
   void add(Command command) {
     if (contains(command.name)) {
-      throw new NameDuplicateError(command.name);
+      throw new DuplicateError()
+        ..name(command.name)
+        ..of('command', command.symbol);
     }
     _commands[command.name] = command;
 
     if (command.hasAbbr) {
       if (containsAbbr(command.abbr)) {
-        throw new AbbrDuplicateError(command.abbr);
+        throw new DuplicateError()
+          ..abbr(command.abbr)
+          ..of('command', command.symbol);
       }
       _abbrs[command.abbr] = command.name;
     }
@@ -415,17 +414,21 @@ class Settings {
   /// Adds a new [Setting].
   ///
   /// If a setting with the same name already exists, throw a
-  /// [NameDuplicateError]. If a setting with the same abbreviation
+  /// [DuplicateError]. If a setting with the same abbreviation
   /// already exists, throw a [AbbrDuplicateError].
   void add(Setting setting) {
     if (contains(setting.name)) {
-      throw new NameDuplicateError(setting.name);
+      throw new DuplicateError()
+        ..name(setting.name)
+        ..of(setting is Flag ? 'flag' : 'option', setting.symbol);
     }
     _settings[setting.name] = setting;
 
     if (setting.hasAbbr) {
       if (containsAbbr(setting.abbr)) {
-        throw new AbbrDuplicateError(setting.abbr);
+        throw new DuplicateError()
+          ..abbr(setting.abbr)
+          ..of(setting is Flag ? 'flag' : 'option', setting.symbol);
       }
       _abbrs[setting.abbr] = setting.name;
     }
@@ -436,18 +439,4 @@ class Settings {
       _settings.values
           .fold('Settings [', (str, setting) => str += setting.toString()) +
       ']';
-}
-
-/// Error to throw when two commands or settings have the same name.
-class NameDuplicateError extends Error {
-  final String name;
-
-  NameDuplicateError(this.name);
-}
-
-/// Error to throw when two commands or settings have the same abbreviation.
-class AbbrDuplicateError extends Error {
-  final String abbr;
-
-  AbbrDuplicateError(this.abbr);
 }
