@@ -77,10 +77,20 @@ abstract class App {
       }
 
       void handleSetting(Symbol symbol, dynamic metadata) {
-        if (metadata is meta.flag) {
-          _settings.add(new Flag.fromMeta(symbol, metadata as meta.flag));
-        } else if (metadata is meta.option) {
-          _settings.add(new Option.fromMeta(symbol, metadata as meta.option));
+        var settingType = 'flag';
+        try {
+          if (metadata is meta.flag) {
+            _settings.add(new Flag.fromMeta(symbol, metadata as meta.flag));
+          } else if (metadata is meta.option) {
+            settingType = 'option';
+            _settings.add(new Option.fromMeta(symbol, metadata as meta.option));
+          }
+        } on NameDuplicateError catch (e) {
+          throw new _HaruError('Name "${e.name}" for global $settingType '
+              '"${MirrorSystem.getName(symbol)}" is duplicate.');
+        } on AbbrDuplicateError catch (e) {
+          throw new _HaruError('Abbreviation "${e.abbr}" for global '
+              '$settingType "${MirrorSystem.getName(symbol)}" is duplicate.');
         }
       }
 
@@ -300,7 +310,7 @@ abstract class Setting {
   Symbol get symbol => _symbol;
 
   Setting(Symbol symbol, {String name = null, String abbr = null})
-      : _name = util.camelToKebab(MirrorSystem.getName(symbol)),
+      : _name = name ?? util.camelToKebab(MirrorSystem.getName(symbol)),
         _symbol = symbol,
         _abbr = abbr;
 
